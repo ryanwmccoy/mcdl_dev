@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+checkpoint/
+spark-warehouse/
+metastore_db/
+models/
+logs/
+*.log
+.DS_Store

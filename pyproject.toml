@@ -1,0 +1,17 @@
+[project]
+name = "mcdl-dev"
+version = "0.1.0"
+description = "Apache Kafka + PySpark streaming ML pipeline for network connection classification"
+requires-python = ">=3.10"
+dependencies = [
+    "pyspark==3.5.1",
+    "kafka-python==2.0.2",
+    "pandas>=2.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
