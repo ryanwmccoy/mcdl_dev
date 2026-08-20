@@ -16,6 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src /app/src
+COPY models /app/models
 ENV PYTHONPATH=/app/src
 
 # Default command is a fetcher; override per service in docker-compose.yml

@@ -2,7 +2,7 @@ import os
 import argparse
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, struct, to_json
+from pyspark.sql.functions import col, from_json, lit, struct, to_json
 from pyspark.sql.types import (
     StructType,
     StructField,
@@ -11,6 +11,7 @@ from pyspark.sql.types import (
     BooleanType,
 )
 from pyspark.ml import PipelineModel
+from pyspark.ml.feature import IndexToString
 
 from config import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -20,6 +21,7 @@ from config import (
     ATTACK_TOPIC,
     MODEL_PATH,
     CHECKPOINT_LOCATION,
+    CLASSIFICATION_MODE,
 )
 from preprocessing import cast_columns
 
@@ -101,10 +103,42 @@ def main():
     parsed = raw.select(from_json(col("value").cast("string"), schema).alias("data")).select("data.*")
     parsed = cast_columns(parsed)
 
-    model = PipelineModel.load(os.path.abspath(args.model))
-    predictions = model.transform(parsed)
+    # The training pipeline may include a label StringIndexer, so ensure the
+    # label column exists for inference (it is not used by the classifier).
+    if "label_multi" not in parsed.columns:
+        parsed = parsed.withColumn("label_multi", lit("none"))
 
-    output_cols = ["src_ip", "dest_ip", "src_port", "dest_port", "protocol", "label_multi", "prediction"]
+    model = PipelineModel.load(os.path.abspath(args.model))
+
+    # If the saved pipeline starts with a label StringIndexer, invert the
+    # numeric prediction back to a readable label for downstream consumers.
+    predictions = model.transform(parsed)
+    first_stage = model.stages[0]
+    if (
+        hasattr(first_stage, "getInputCol")
+        and first_stage.getInputCol() == "label_multi"
+        and hasattr(first_stage, "labels")
+    ):
+        inv = IndexToString(
+            inputCol="prediction",
+            outputCol="predicted_label",
+            labels=first_stage.labels,
+        )
+        predictions = inv.transform(predictions)
+
+    base_output_cols = [
+        "src_ip",
+        "dest_ip",
+        "src_port",
+        "dest_port",
+        "protocol",
+        "conn_state",
+        "label_multi",
+    ]
+    if "predicted_label" in predictions.columns:
+        base_output_cols.append("predicted_label")
+    base_output_cols.append("prediction")
+    output_cols = [c for c in base_output_cols if c in predictions.columns]
     output_df = predictions.select(*output_cols)
 
     # Console sink
@@ -118,23 +152,18 @@ def main():
     )
 
     # Kafka sinks: all predictions, benign, and attack
+    mode = os.getenv("CLASSIFICATION_MODE", CLASSIFICATION_MODE)
+    if mode == "binary":
+        benign_df = output_df.filter(col("prediction") == 1.0)
+        attack_df = output_df.filter(col("prediction") == 0.0)
+    else:
+        # Multiclass: index 0 is the "none" / benign label.
+        benign_df = output_df.filter(col("prediction") == 0.0)
+        attack_df = output_df.filter(col("prediction") != 0.0)
+
     _kafka_query(output_df, args.bootstrap, args.output_topic, args.checkpoint, "predictions", output_cols)
-    _kafka_query(
-        output_df.filter(col("prediction") == 1.0),
-        args.bootstrap,
-        args.benign_topic,
-        args.checkpoint,
-        "benign",
-        output_cols,
-    )
-    _kafka_query(
-        output_df.filter(col("prediction") == 0.0),
-        args.bootstrap,
-        args.attack_topic,
-        args.checkpoint,
-        "attack",
-        output_cols,
-    )
+    _kafka_query(benign_df, args.bootstrap, args.benign_topic, args.checkpoint, "benign", output_cols)
+    _kafka_query(attack_df, args.bootstrap, args.attack_topic, args.checkpoint, "attack", output_cols)
 
     print("Streaming inference started. Listening on topic:", args.input_topic)
     spark.streams.awaitAnyTermination()

@@ -9,7 +9,6 @@ __pycache__/
 dist/
 build/
 checkpoint/
-models/
 data/*.csv
 .DS_Store
 .env
