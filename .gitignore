@@ -11,5 +11,7 @@ spark-warehouse/
 metastore_db/
 models/
 logs/
+results/
+data/
 *.log
 .DS_Store

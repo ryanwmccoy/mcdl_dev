@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.Bucketizer","timestamp":1787253371776,"sparkVersion":"3.5.1","uid":"Bucketizer_feb982f19230","paramMap":{"splits":["-Inf",0.0,1.0,3.0,48.0,68.0,"Inf"],"outputCol":"resp_pkts_bin","inputCol":"resp_pkts","handleInvalid":"keep"},"defaultParamMap":{"outputCol":"QuantileDiscretizer_f6178dfeea4e__output","handleInvalid":"error"}}
