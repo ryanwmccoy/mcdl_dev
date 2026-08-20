@@ -27,7 +27,7 @@ def _random_ip():
     return str(ipaddress.IPv4Address(random.randint(0, 2**32 - 1)))
 
 
-def _generate_record(label=None):
+def generate_record(label=None):
     is_attack = label is not None and label != "none"
     record = {
         "src_ip": _random_ip(),
@@ -58,13 +58,18 @@ def generate_labels():
     return ["none"] + attack_labels
 
 
-def generate_dataset(num_records, output_path, label_distribution=None):
+def balanced_distribution(benign_ratio=0.6):
     labels = generate_labels()
-    if label_distribution is None:
-        label_distribution = {label: 1.0 / len(labels) for label in labels}
+    distribution = {label: 0.0 for label in labels}
+    distribution["none"] = benign_ratio
+    for label in labels:
+        if label != "none":
+            distribution[label] = (1.0 - benign_ratio) / (len(labels) - 1)
+    return distribution
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    fieldnames = (
+
+def default_fieldnames():
+    return (
         ["src_ip", "dest_ip", "src_port", "dest_port"]
         + ["protocol", "conn_state", "service", "history"]
         + NUMERIC_COLS
@@ -72,16 +77,29 @@ def generate_dataset(num_records, output_path, label_distribution=None):
         + [LABEL_COL]
     )
 
+
+def generate_records(num_records, label_distribution=None):
+    if label_distribution is None:
+        label_distribution = balanced_distribution()
+
+    records = []
+    labels = list(label_distribution.keys())
+    weights = [label_distribution[k] for k in labels]
+    for _ in range(num_records):
+        label = random.choices(labels, weights=weights, k=1)[0]
+        records.append(generate_record(label))
+    return records
+
+
+def generate_dataset(num_records, output_path, label_distribution=None):
+    records = generate_records(num_records, label_distribution)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    fieldnames = default_fieldnames()
+
     with open(output_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        for _ in range(num_records):
-            label = random.choices(
-                list(label_distribution.keys()),
-                weights=list(label_distribution.values()),
-                k=1,
-            )[0]
-            writer.writerow(_generate_record(label))
+        writer.writerows(records)
 
 
 def main():
@@ -90,13 +108,7 @@ def main():
     parser.add_argument("--streaming", type=int, default=1000, help="Number of streaming records")
     args = parser.parse_args()
 
-    labels = generate_labels()
-    label_distribution = {label: 1.0 / len(labels) for label in labels}
-    # make benign more common in historical data
-    label_distribution["none"] = 0.6
-    for label in labels:
-        if label != "none":
-            label_distribution[label] = 0.4 / (len(labels) - 1)
+    label_distribution = balanced_distribution(benign_ratio=0.6)
 
     print(f"Generating {args.historical} historical records -> {HISTORICAL_DATA_PATH}")
     generate_dataset(args.historical, HISTORICAL_DATA_PATH, label_distribution)

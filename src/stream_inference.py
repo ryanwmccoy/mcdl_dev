@@ -1,15 +1,13 @@
 import os
 import argparse
-import json
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, struct, to_json, udf
+from pyspark.sql.functions import col, from_json, struct, to_json
 from pyspark.sql.types import (
     StructType,
     StructField,
     StringType,
     DoubleType,
-    IntegerType,
     BooleanType,
 )
 from pyspark.ml import PipelineModel
@@ -18,6 +16,8 @@ from config import (
     KAFKA_BOOTSTRAP_SERVERS,
     INPUT_TOPIC,
     OUTPUT_TOPIC,
+    BENIGN_TOPIC,
+    ATTACK_TOPIC,
     MODEL_PATH,
     CHECKPOINT_LOCATION,
 )
@@ -50,11 +50,27 @@ def _build_conn_schema():
     )
 
 
+def _kafka_query(df, bootstrap_servers, topic, checkpoint_base, checkpoint_name, output_cols):
+    value_df = df.withColumn("value", to_json(struct(*output_cols))).select("value")
+    return (
+        value_df.writeStream
+        .outputMode("append")
+        .format("kafka")
+        .option("kafka.bootstrap.servers", bootstrap_servers)
+        .option("topic", topic)
+        .option("checkpointLocation", os.path.join(os.path.abspath(checkpoint_base), checkpoint_name))
+        .queryName(f"kafka-{topic}")
+        .start()
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run streaming inference on conn records from Kafka")
     parser.add_argument("--model", default=MODEL_PATH, help="Path to trained pipeline")
     parser.add_argument("--input-topic", default=INPUT_TOPIC, help="Kafka input topic")
-    parser.add_argument("--output-topic", default=OUTPUT_TOPIC, help="Kafka output topic")
+    parser.add_argument("--output-topic", default=OUTPUT_TOPIC, help="Kafka output topic for all predictions")
+    parser.add_argument("--benign-topic", default=BENIGN_TOPIC, help="Kafka topic for benign predictions")
+    parser.add_argument("--attack-topic", default=ATTACK_TOPIC, help="Kafka topic for attack predictions")
     parser.add_argument("--bootstrap", default=KAFKA_BOOTSTRAP_SERVERS, help="Kafka bootstrap servers")
     parser.add_argument("--checkpoint", default=CHECKPOINT_LOCATION, help="Checkpoint directory")
     args = parser.parse_args()
@@ -101,22 +117,27 @@ def main():
         .start()
     )
 
-    # Kafka sink: emit a JSON value column
-    output_json = output_df.withColumn("value", to_json(struct(*output_cols))).select("value")
-    query_kafka = (
-        output_json.writeStream
-        .outputMode("append")
-        .format("kafka")
-        .option("kafka.bootstrap.servers", args.bootstrap)
-        .option("topic", args.output_topic)
-        .option("checkpointLocation", os.path.join(os.path.abspath(args.checkpoint), "kafka"))
-        .queryName("kafka-predictions")
-        .start()
+    # Kafka sinks: all predictions, benign, and attack
+    _kafka_query(output_df, args.bootstrap, args.output_topic, args.checkpoint, "predictions", output_cols)
+    _kafka_query(
+        output_df.filter(col("prediction") == 1.0),
+        args.bootstrap,
+        args.benign_topic,
+        args.checkpoint,
+        "benign",
+        output_cols,
+    )
+    _kafka_query(
+        output_df.filter(col("prediction") == 0.0),
+        args.bootstrap,
+        args.attack_topic,
+        args.checkpoint,
+        "attack",
+        output_cols,
     )
 
     print("Streaming inference started. Listening on topic:", args.input_topic)
-    query_console.awaitTermination()
-    query_kafka.awaitTermination()
+    spark.streams.awaitAnyTermination()
 
 
 if __name__ == "__main__":
