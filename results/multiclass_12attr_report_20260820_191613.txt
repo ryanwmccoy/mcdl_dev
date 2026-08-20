@@ -1,0 +1,29 @@
+12-Attribute Multiclass Random Forest Training Report
+============================================================
+Timestamp:    2026-08-20T19:16:13.992239
+Data source:  /data/all
+Model path:   /tmp/models/multiclass_12attr_all
+Feature cols: ['protocol_idx', 'conn_state_idx', 'src_port_bin', 'dest_port_bin', 'orig_bytes_bin', 'orig_pkts_bin', 'orig_ip_bytes_bin', 'resp_bytes_bin', 'resp_pkts_bin', 'resp_ip_bytes_bin', 'missed_bytes_bin', 'local_resp_bin']
+
+Overall Metrics
+----------------------------------------
+Accuracy:            0.988882
+Weighted Precision:  0.989995
+Weighted Recall:     0.988882
+Weighted F1:         0.988881
+F1:                  0.988881
+
+Confusion Matrix (rows = true, columns = predicted)
+----------------------------------------
+[[273536;0;356;0;0;0;0;0];  [0;261451;0;0;0;0;0;0];  [0;0;13637;3;8;7;12;0];  [2;0;42;1459;159;913;631;0];  [2;0;57;98;120;886;639;0];  [2;0;45;92;170;869;643;0];  [2;0;42;98;164;950;572;0];  [0;0;39;10;60;45;25;0]]
+
+Per-Class Metrics
+----------------------------------------
+Credential Access     precision=1.0000  recall=1.0000  f1=1.0000  tpr=1.0000  fpr=0.0000
+Defense Evasion       precision=0.2368  recall=0.4772  f1=0.3165  tpr=0.4772  fpr=0.0050
+Exfiltration          precision=0.0000  recall=0.0000  f1=0.0000  tpr=0.0000  fpr=0.0000
+Initial Access        precision=0.8290  recall=0.4551  f1=0.5876  tpr=0.4551  fpr=0.0005
+Persistence           precision=0.1762  recall=0.0666  f1=0.0967  tpr=0.0666  fpr=0.0010
+Privilege Escalation  precision=0.2268  recall=0.3129  f1=0.2630  tpr=0.3129  fpr=0.0035
+Reconnaissance        precision=0.9591  recall=0.9978  f1=0.9781  tpr=0.9978  fpr=0.0011
+none                  precision=1.0000  recall=0.9987  f1=0.9993  tpr=0.9987  fpr=0.0000
