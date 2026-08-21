@@ -54,25 +54,6 @@ services:
       retries: 10
       start_period: 5s
 
-  train:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["python", "/app/src/train.py", "--api-type", "historical"]
-    environment:
-      CLASSIFICATION_MODE: "binary"
-      SOURCE_API_URL: "http://mock-api:8000"
-      KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
-      MODEL_PATH: "/app/models/pipeline"
-    volumes:
-      - models:/app/models
-    depends_on:
-      mock-api:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    restart: "no"
-
   fetcher:
     build:
       context: .
@@ -101,7 +82,7 @@ services:
       - "python"
       - "/app/src/stream_inference.py"
       - "--model"
-      - "/app/models/pipeline"
+      - "/app/models/multiclass_12attr"
       - "--input-topic"
       - "network-conn"
       - "--output-topic"
@@ -115,16 +96,13 @@ services:
       - "--checkpoint"
       - "/app/checkpoint"
     environment:
-      CLASSIFICATION_MODE: "binary"
+      CLASSIFICATION_MODE: "multiclass"
       KAFKA_BOOTSTRAP_SERVERS: "kafka:29092"
-      MODEL_PATH: "/app/models/pipeline"
+      MODEL_PATH: "/app/models/multiclass_12attr"
       CHECKPOINT_LOCATION: "/app/checkpoint"
     volumes:
-      - models:/app/models:ro
       - checkpoint:/app/checkpoint
     depends_on:
-      train:
-        condition: service_completed_successfully
       kafka:
         condition: service_healthy
     restart: unless-stopped
@@ -150,5 +128,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  models:
   checkpoint:
